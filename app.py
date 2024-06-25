@@ -36,7 +36,7 @@ def recibir_mensajes():
         messageId = message['id']
         contacts = value['contacts'][0]
         name = contacts['profile']['name']
-        text = services.obtener_Mensajes_whatsapp(message)
+        text = services.obtener_Mensaje_whatsapp(message)
 
         services.administrar_chatbot(text,number,messageId,name)
         return 'enviado',200
