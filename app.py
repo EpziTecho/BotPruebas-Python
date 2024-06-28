@@ -1,6 +1,8 @@
-from flask import Flask, request
+from flask import Flask, request,jsonify,json
 import sett
 import services
+import db.database as database 
+from db.models import get_driver_idnumbers
 
 
 app = Flask(__name__)
@@ -26,13 +28,15 @@ def verificar_token():
 @app.route('/webhook', methods=['POST'])
 def recibir_mensajes():
     try:
+        body = request.get_json()  # Obtener el cuerpo del mensaje
+        print("Cuerpo completo del mensaje:", json.dumps(body, indent=4))  # Imprimir el mensaje completo
         body = request.get_json()
         entry = body['entry'][0]
         changes= entry['changes'][0]
         value = changes['value']
         message = value['messages'][0]
+        # number = services.replace_start(message['from'])
         number = message['from']
-        text = message['text']
         messageId = message['id']
         contacts = value['contacts'][0]
         name = contacts['profile']['name']
@@ -44,5 +48,11 @@ def recibir_mensajes():
     except Exception as e:
         return 'no enviado' + str(e)
 
+@app.route('/drivers/idnumbers', methods=['GET'])
+def drivers_idnumbers():
+    idnumbers = get_driver_idnumbers()
+    return jsonify(idnumbers)
+
 if __name__ == '__main__':
-    app.run()
+    database.test_db_connection()
+    app.run(debug=True)

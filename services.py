@@ -3,6 +3,12 @@ import sett
 import json
 import time
 
+from db.models import check_driver_id, get_driver_idnumbers
+
+
+# Variable global para mantener un historial de estados
+historial_de_estados = []
+
 def obtener_Mensaje_whatsapp(message):
     if 'type' not in message :
         text = 'mensaje no reconocido'
@@ -55,7 +61,7 @@ def text_Message(number,text):
     )
     return data
 
-def buttonReply_Message(number, options, body, footer, sedd,messageId):
+def buttonReply_Message(number, options, body, footer, sedd, messageId, include_back=False, back_sedd=None):
     buttons = []
     for i, option in enumerate(options):
         buttons.append(
@@ -64,6 +70,17 @@ def buttonReply_Message(number, options, body, footer, sedd,messageId):
                 "reply": {
                     "id": sedd + "_btn_" + str(i+1),
                     "title": option
+                }
+            }
+        )
+    
+    if include_back:
+        buttons.append(
+            {
+                "type": "reply",
+                "reply": {
+                    "id": back_sedd + "_back",
+                    "title": "🔙 Volver"
                 }
             }
         )
@@ -185,7 +202,6 @@ def replyReaction_Message(number, messageId, emoji):
         }
     )
     return data
-
 def replyText_Message(number, messageId, text):
     data = json.dumps(
         {
@@ -211,95 +227,58 @@ def markRead_Message(messageId):
     )
     return data
 
-def administrar_chatbot(text,number, messageId, name):
-    text = text.lower() #mensaje que envio el usuario
-    list = []
-    print("mensaje del usuario: ",text)
+def handle_id_query(number, text):
+    if text.isdigit():
+        exists = check_driver_id(text)
+        response_text = "Identificación encontrada." if exists else "Identificación no encontrada."
+    else:
+        response_text = "Por favor, envíe un número de identificación válido."
+    return text_Message(number, response_text)
 
-    markRead = markRead_Message(messageId)
-    list.append(markRead)
-    time.sleep(2)
+def administrar_chatbot(text, number, messageId, name):
+    global historial_de_estados
+    # Asegúrate de que el texto es una cadena, convertir a minúsculas y limpiar espacios
+    text = str(text).strip().lower()
+    actions = []  # Lista para guardar las acciones a enviar
+    print("Mensaje del usuario:", text)  # Depuración para ver qué recibe exactamente el bot
 
-    if "hola" in text:
-        body = "¡Hola! 👋 Bienvenido a RamonitaBot. ¿Cómo podemos ayudarte hoy?"
-        footer = "Equipo ArcaContintental"
-        options = ["✅ servicios 1", "✅ servicios 2", "✅ servicios 3"]
+    # Verificar estado actual
+    current_state = historial_de_estados[-1]['text'] if historial_de_estados else "inicio"
+    print("Estado actual:", current_state)  # Depuración para entender el estado
 
-        replyButtonData = buttonReply_Message(number, options, body, footer, "sed1",messageId)
-        replyReaction = replyReaction_Message(number, messageId, "🫡")
-        list.append(replyReaction)
-        list.append(replyButtonData)
-
-
-
-
-
-
-
-
-
-
-
+    if text == "hola":
+        # Obtener todos los ID Numbers de la base de datos
+        id_numbers = get_driver_idnumbers()  # Suponemos que esta función devuelve una lista de diccionarios
+        id_list = ', '.join([str(id['idNumber']) for id in id_numbers])
         
-    elif "servicios" in text:
-        body = "Tenemos varias áreas de consulta para elegir. ¿Cuál de estos servicios te gustaría explorar?"
-        footer = "Equipo ArcaContintental"
-        options = ["Analítica Avanzada", "Migración Cloud", "Inteligencia de Negocio"]
+        body = f"¡Hola! 👋 Bienvenido a nuestro servicio. Por favor, ingrese su número de identificación para continuar:\n\nIDs disponibles: {id_list}"
+        
+        historial_de_estados = [{"text": "esperando id", "number": number, "messageId": messageId, "name": name}]
+        actions.append(text_Message(number, body))
+    elif current_state == "esperando id":
+        # Convertir texto a número antes de aplicar isdigit
+        try:
+            id_number = int(text)
+            exists = check_driver_id(id_number) 
+            print(check_driver_id(id_number))
+            print ("existe", exists)
+            if exists:
+                body = "Bienvenido al sistema, aquí están los servicios disponibles."
+                historial_de_estados.append({"text": "id confirmado", "number": number, "messageId": messageId, "name": name})
+            else:
+                body = "Usuario no encontrado. Por favor, intenta de nuevo."
+            actions.append(text_Message(number, body))
+            historial_de_estados = []  # Resetear estado tras respuesta
+        except ValueError:
+            body = "Número inválido. Por favor, intente nuevamente."
+            actions.append(text_Message(number, body))
+    else:
+        body = "Lo siento, no entendí eso. ¿Puedes intentar de nuevo?"
+        actions.append(text_Message(number, body))
 
-        listReplyData = listReply_Message(number, options, body, footer, "sed2",messageId)
-        sticker = sticker_Message(number, get_media_id("perro_traje", "sticker"))
-
-        list.append(listReplyData)
-        list.append(sticker)
-    elif "inteligencia de negocio" in text:
-        body = "Buenísima elección. ¿Te gustaría que te enviara un documento PDF con una introducción a nuestros métodos de Inteligencia de Negocio?"
-        footer = "Equipo ArcaContintental"
-        options = ["✅ Sí, envía el PDF.", "⛔ No, gracias"]
-
-        replyButtonData = buttonReply_Message(number, options, body, footer, "sed3",messageId)
-        list.append(replyButtonData)
-    elif "sí, envía el pdf" in text:
-        sticker = sticker_Message(number, get_media_id("pelfet", "sticker"))
-        textMessage = text_Message(number,"Genial, por favor espera un momento.")
-
-        enviar_Mensaje_whatsapp(sticker)
-        enviar_Mensaje_whatsapp(textMessage)
-        time.sleep(3)
-
-        document = document_Message(number, sett.document_url, "Listo 👍🏻", "Inteligencia de Negocio.pdf")
-        enviar_Mensaje_whatsapp(document)
-        time.sleep(3)
-
-        body = "¿Te gustaría programar una reunión con uno de nuestros especialistas para discutir estos servicios más a fondo?"
-        footer = "Equipo ArcaContintental"
-        options = ["✅ Sí, agenda reunión", "No, gracias." ]
-
-        replyButtonData = buttonReply_Message(number, options, body, footer, "sed4",messageId)
-        list.append(replyButtonData)
-    elif "sí, agenda reunión" in text :
-        body = "Estupendo. Por favor, selecciona una fecha y hora para la reunión:"
-        footer = "Equipo Bigdateros"
-        options = ["📅 10: mañana 10:00 AM", "📅 7 de junio, 2:00 PM", "📅 8 de junio, 4:00 PM"]
-
-        listReply = listReply_Message(number, options, body, footer, "sed5",messageId)
-        list.append(listReply)
-    elif "7 de junio, 2:00 pm" in text:
-        body = "Excelente, has seleccionado la reunión para el 7 de junio a las 2:00 PM. Te enviaré un recordatorio un día antes. ¿Necesitas ayuda con algo más hoy?"
-        footer = "Equipo Bigdateros"
-        options = ["✅ Sí, por favor", "❌ No, gracias."]
-
-
-        buttonReply = buttonReply_Message(number, options, body, footer, "sed6",messageId)
-        list.append(buttonReply)
-    elif "no, gracias." in text:
-        textMessage = text_Message(number,"Perfecto! No dudes en contactarnos si tienes más preguntas. Recuerda que también ofrecemos material gratuito para la comunidad. ¡Hasta luego! 😊")
-        list.append(textMessage)
-    else :
-        data = text_Message(number,"Lo siento, no entendí lo que dijiste. ¿Quieres que te ayude con alguna de estas opciones?")
-        list.append(data)
-
-    for item in list:
-        enviar_Mensaje_whatsapp(item)
+    # Enviar todas las acciones acumuladas
+    for action in actions:
+        enviar_Mensaje_whatsapp(action)
 
 #al parecer para mexico, whatsapp agrega 521 como prefijo en lugar de 52,
 # este codigo soluciona ese inconveniente.
